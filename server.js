@@ -12,7 +12,7 @@ const db = require('./config/db');
 
 var jwt = require('express-jwt');
 const dotenv = require('dotenv');
-dotenv.config()
+dotenv.config();
 
 app.use(bodyParser.json());
 app.use(jwt({ secret: process.env.TOKEN_SECRET, algorithms: ['HS384'] }).unless({
@@ -20,7 +20,8 @@ app.use(jwt({ secret: process.env.TOKEN_SECRET, algorithms: ['HS384'] }).unless(
         '/api/register',
         '/api/login',
         '/api/google/login',
-        '/api/facebook/login'
+        '/api/facebook/login',
+        '/api/permission/check'
     ]
 }));
 app.use((err, req, res, next) => {
