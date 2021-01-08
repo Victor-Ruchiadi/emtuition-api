@@ -7,6 +7,7 @@ var salt = 10;
 
 const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
+const { type } = require('os');
 
 
 async function register(req, res, db) {
@@ -762,31 +763,71 @@ async function getAllClasses (req, res, db) {
     let roleId = decoded.role_id;
     let username = decoded.username;
     if (+roleId !== 1 && +roleId !== 2) {
+        console.log(roleId);
         return res.send({
             'message': 'Access forbiden',
             'role': roleId
         });
     }
+    let details = {}
     if (+roleId === 2) {
-        console.log(username);
         let userId = await db.collection('user').findOne({
             'username': username
         })
         userId = userId._id;
         console.log(userId)
-        const details = {
+        details = {
             'teacher_id': +userId,
             'is_active': 1
         }
-        let classes = await db.collection('class').find(details).toArray();
-        return res.send(classes);
+    } else {
+        details = {
+            'teacher_id': req.body.teacher,
+            'is_active': 1
+        }
     }
     try {
-        const details = {
-            'is_active': 1
-        };
         let classes = await db.collection('class').find(details).toArray();
-        return res.send(classes);
+        let classesId = [];
+        classes.forEach(v => {
+            classesId.push(v._id);
+        });
+        let classStudents = [];
+        for (const classId of classesId) {
+            let obj = {
+                'class_id': classId,
+                'is_active': 1,
+                'user_is_active': 1
+            }
+            let classSelected = await db.collection('user_class').find(obj).toArray();
+            classSelected.forEach(v => {
+                classStudents.push(v)
+            })
+        }
+        let students = [];
+        for (const student of classStudents) {
+            let details = {
+                '_id': student.student_id,
+                'role_id': 3
+            };
+            let studentSelected = await db.collection('user').findOne(details);
+            students.push(studentSelected);
+        }
+        let classUser = [];
+        for (let i = 0; i < classStudents.length; i++) {
+            let obj = {
+                'username': students[i].username,
+                'class_id': classStudents[i].class_id,
+                'student_id': classStudents[i].student_id
+            }
+            classUser.push(obj)
+        }
+        return res.send({
+            classes,
+            classStudents,
+            students,
+            classUser
+        })
     }
     catch (err) {
         return res.send('ERRORRRR');
@@ -1114,6 +1155,185 @@ async function addTeacher(req, res, db) {
     }
 }
 
+async function getClassInfo (req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let highestId = await db.collection('user_class').find().sort([['_id', -1]]).limit(1).toArray();
+        console.log(highestId);
+        let newestId = '';
+        if (highestId.length === 0) {
+            newestId = 1;
+        } else {
+            highestId = highestId[0]._id;
+            newestId = highestId + 1;
+        }
+        console.log(newestId, 'newestId');
+        let details = {
+            'role_id': 3,
+            'is_active': 1
+        }
+        let students = await db.collection('user').find(details).toArray();
+        details = {
+            'class_id': parseInt(req.body.class),
+            'is_active': 1,
+            'user_is_active': 1
+        }
+        let selectedClass = await db.collection('user_class').find(details).toArray();
+        let studentsId = [];
+        selectedClass.forEach(v => { studentsId.push(v.student_id)});
+        const selectedStudents = students.filter((s) => {
+            return studentsId.includes(s._id);
+        })
+        const availableStudents = students.filter((s) => {
+            return !studentsId.includes(s._id);
+
+        })
+        console.log(selectedStudents);
+        details = {
+            '_id': req.body.class
+        }
+        const teacher = await db.collection('class').findOne(details);
+        const teacherId = teacher._id;
+        console.log(teacherId);
+        return res.send({
+            selectedStudents,
+            availableStudents,
+            teacherId,
+            newestId
+        })
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function changeClassStudentStatus(req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let success = true;
+        const availableStudents = req.body.availableStudents;
+        const selectedStudents = req.body.selectedStudents;
+        if ( availableStudents.length !== 0) {
+            let index = 0;
+            availableStudents.forEach(async(student) => {
+                let details = {
+                    'student_id': student._id,
+                    'class_id': req.body.class
+                };
+                const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
+                let userCreated = await db.collection('user_class').findOne(details);
+                if (userCreated) {
+                    console.log(userCreated);
+                    let userUpdated = await db.collection('user_class').update(
+                        {
+                            'student_id': student._id,
+                            'class_id': req.body.class,
+                            'is_active': 1,
+                            'user_is_active': 0
+                        },
+                        {
+                            $set: {
+                                'user_is_active': 1,
+                                'updated_date': createdDate
+                            }
+                        }
+                    )
+                    if (userUpdated.result.n === 1 && userUpdated.result.nModified === 1 && userUpdated.result.ok === 1) {
+                        success = true;
+                    } else {
+                        success = false;
+                    }
+                }
+                else {
+                    details = {
+                        '_id': req.body.id[index],
+                        'student_id': student._id,
+                        'class_id': req.body.class,
+                        'created_date': createdDate,
+                        'is_active': 1,
+                        'user_is_active': 1
+                    }
+                    index++;
+                    let userAdded = await db.collection('user_class').insert(details);
+                    if (userAdded) {
+                        success = true;
+                    } else {
+                        success = false;
+                    }
+                }
+            })
+        }
+        if (selectedStudents.length !== 0) {
+            selectedStudents.forEach(async (student) => {
+                let details = {
+                    'student_id': student._id,
+                    'class_id': req.body.class
+                };
+                const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
+                let userCreated = db.collection('user_class').findOne(details);
+                if (userCreated) {
+                    let userUpdated = await db.collection('user_class').update(
+                        {
+                            'student_id': student._id,
+                            'class_id': req.body.class,
+                            'user_is_active': 1
+                        },
+                        {
+                            $set: {
+                                'user_is_active': 0,
+                                'deleted_date': createdDate
+                            }
+                        }
+                    )
+                    if (userUpdated.result.n === 1 && userUpdated.result.nModified === 1 && userUpdated.result.ok === 1) {
+                        success = true;
+                    } else {
+                        success = false;
+                    }
+                }
+            })
+        }
+        if (success === true) {
+            return res.send({
+                'success': true,
+                'message': 'Users updated'
+            })
+        } else {
+            return res.send({
+                'success': false,
+                'message': 'Some errors occured'
+            })
+        }
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'success': false,
+            'message': 'Some errors occured'
+        });
+    }
+}
+
 module.exports = {
   register: register,
   login: login,
@@ -1140,5 +1360,7 @@ module.exports = {
   changeClassData: changeClassData,
   deleteClass: deleteClass,
   addStudent: addStudent,
-  addTeacher: addTeacher
+  addTeacher: addTeacher,
+  getClassInfo: getClassInfo,
+  changeClassStudentStatus: changeClassStudentStatus
 };
