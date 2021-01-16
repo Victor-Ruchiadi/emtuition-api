@@ -31,6 +31,10 @@ module.exports = function(app, db, controllers) {
     app.post('/api/classes/id', async (req, res) => await controllers.getClassById(req, res, db))
     app.post('/api/classes/data/change', async (req, res) => await controllers.changeClassData(req, res, db))
     app.post('/api/classes/delete', async (req, res) => await controllers.deleteClass(req, res, db))
+    app.post('/api/classes/name', async (req, res) => await controllers.getAllClassesName(req, res, db))
     app.post('/api/classes/students', async (req, res) => await controllers.getClassInfo(req, res, db))
     app.post('/api/classes/students/change', async (req, res) => await controllers.changeClassStudentStatus(req, res, db))
+    app.post('/api/payment', async (req, res) => await controllers.getAllUserPayment(req, res, db))
+    app.post('/api/payment/user', async (req, res) => await controllers.getPaymentByUser(req, res, db))
+    app.post('/api/payment/change', async (req, res) => await controllers.changePaymentAmount(req, res, db))
 };

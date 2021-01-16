@@ -617,6 +617,16 @@ async function deleteStudent(req, res, db) {
                         'deleted_date': deletedDate
                     }
                 });
+                await db.collection('class_user_payment').update(
+                    {
+                        student_id: req.body.id
+                    }, {
+                        $set: {
+                            'is_active': 0,
+                            'deleted_date': deletedDate
+                        }
+                    }
+                )
                 return res.send('success');
             } else {
                 return res.send('The user is not a student')
@@ -1079,10 +1089,28 @@ async function addStudent (req, res, db) {
         };
         let newStudent = await db.collection('user').insert(details);
         if (newStudent) {
-            return res.send({
-                'type': 'success',
-                'message': 'Student created'
-            })
+            let highestPaymentId = await db.collection('class_user_payment').find().sort([['_id', -1]]).limit(1).toArray();
+            highestPaymentId = highestPaymentId[0]._id;
+            const newestPaymentId = highestPaymentId + 1;
+            details = {
+                '_id': newestPaymentId,
+                'student_id': newestId,
+                'amount': 0,
+                'created_date': createdDate,
+                'is_active': 1
+            };
+            let amountInserted = await db.collection('class_user_payment').insert(details);
+            if (amountInserted) {
+                return res.send({
+                    'type': 'success',
+                    'message': 'Student created'
+                })
+            } else {
+                return res.send({
+                    'type': 'error',
+                    'message': 'Some errors occured'
+                });
+            }
         } else {
             return res.send({
                 'type': 'error',
@@ -1334,6 +1362,134 @@ async function changeClassStudentStatus(req, res, db) {
     }
 }
 
+async function getAllUserPayment(req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let details = {
+            'is_active': 1
+        }
+        let userPayment = await db.collection('class_user_payment').find(details).toArray();
+        return res.send({
+            userPayment
+        })
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function changePaymentAmount(req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
+        let amountUpdated = await db.collection('class_user_payment').update(
+            {
+                '_id': req.body.id
+            },
+            {
+                $set: {
+                    'last_amount': req.body.lastAmount,
+                    'amount': req.body.newAmount,
+                    'updated_date': createdDate
+                }
+            }
+        )
+        if (amountUpdated.result.n === 1 && amountUpdated.result.nModified === 1 && amountUpdated.result.ok === 1) {
+            return res.send({
+                'type': 'success',
+                'message': 'User updated'
+            })
+        } else {
+            return res.send({
+                'type': 'error',
+                'message': 'Some errors occured'
+            });
+        }
+    } catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function getAllClassesName(req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let classes = await db.collection('class').find({}).toArray();
+        return res.send({
+            classes
+        })
+    }
+    catch(err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function getPaymentByUser(req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        console.log(req.body.student);
+        let details = {
+            'student_id': req.body.student,
+            'is_active': 1
+        }
+        let payments = await db.collection('class_user_payment').find(details).toArray();
+        // console.log(payments);
+        if (payments) {
+            return res.send({payments});
+        }
+    }
+    catch(err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
 module.exports = {
   register: register,
   login: login,
@@ -1362,5 +1518,9 @@ module.exports = {
   addStudent: addStudent,
   addTeacher: addTeacher,
   getClassInfo: getClassInfo,
-  changeClassStudentStatus: changeClassStudentStatus
+  changeClassStudentStatus: changeClassStudentStatus,
+  getAllUserPayment: getAllUserPayment,
+  changePaymentAmount: changePaymentAmount,
+  getAllClassesName: getAllClassesName,
+  getPaymentByUser: getPaymentByUser
 };
