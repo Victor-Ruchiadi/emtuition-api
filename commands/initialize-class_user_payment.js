@@ -29,7 +29,7 @@ function insertClassUserPayment(db) {
         {
             'student_id': 4,
             'amount': 200000,
-            'class_id': 1
+            'class_id': 3
         },
         {
             'student_id': 6,

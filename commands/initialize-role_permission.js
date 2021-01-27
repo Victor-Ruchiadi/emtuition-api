@@ -66,6 +66,22 @@ function insertRolePermission(db) {
         },
         {
             role_id: 2,
+            permission_id: 2,
+            can_create: true,
+            can_read: true,
+            can_update: true,
+            can_delete: true,
+        },
+        {
+            role_id: 2,
+            permission_id: 3,
+            can_create: true,
+            can_read: true,
+            can_update: true,
+            can_delete: true,
+        },
+        {
+            role_id: 2,
             permission_id: 5,
             can_create: true,
             can_read: true,

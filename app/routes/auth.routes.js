@@ -37,4 +37,7 @@ module.exports = function(app, db, controllers) {
     app.post('/api/payment', async (req, res) => await controllers.getAllUserPayment(req, res, db))
     app.post('/api/payment/user', async (req, res) => await controllers.getPaymentByUser(req, res, db))
     app.post('/api/payment/change', async (req, res) => await controllers.changePaymentAmount(req, res, db))
+    app.post('/api/payment/students/log', async (req, res) => await controllers.getStudentPaymentLog(req, res, db))
+    app.post('/api/payment/students/add', async (req, res) => await controllers.addStudentPayment(req, res, db))
+    app.post('/api/payment/all', async (req, res) => await controllers.getAllPayments(req, res, db))
 };

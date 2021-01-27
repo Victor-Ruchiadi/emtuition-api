@@ -1271,7 +1271,7 @@ async function changeClassStudentStatus(req, res, db) {
                 const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
                 let userCreated = await db.collection('user_class').findOne(details);
                 if (userCreated) {
-                    console.log(userCreated);
+                    // console.log(userCreated);
                     let userUpdated = await db.collection('user_class').update(
                         {
                             'student_id': student._id,
@@ -1286,6 +1286,25 @@ async function changeClassStudentStatus(req, res, db) {
                             }
                         }
                     )
+                    let paymentCreated = await db.collection('class_user_payment').findOne({
+                        'is_active': 0,
+                        'student_id': student._id,
+                        'class_id': req.body.class
+                    })
+                    if (paymentCreated) {
+                        await db.collection('class_user_payment').update(
+                            {
+                                'is_active': 0,
+                                'student_id': student._id,
+                                'class_id': req.body.class
+                            }, 
+                            {
+                                $set: {
+                                    'is_active': 1
+                                }
+                            }
+                        );
+                    } 
                     if (userUpdated.result.n === 1 && userUpdated.result.nModified === 1 && userUpdated.result.ok === 1) {
                         success = true;
                     } else {
@@ -1303,6 +1322,29 @@ async function changeClassStudentStatus(req, res, db) {
                     }
                     index++;
                     let userAdded = await db.collection('user_class').insert(details);
+                    let highestId = await db.collection('class_user_payment').find().sort([['_id', -1]]).limit(1).toArray();
+                    highestId = highestId[0]._id;
+                    const paymentId = highestId + 1;
+                    details = {
+                        '_id': paymentId,
+                        'student_id': student._id,
+                        'amount': 0,
+                        'class_id': req.body.class,
+                        'created_date': createdDate,
+                        'is_active': 1,
+                    }
+                    let paymentAdded = await db.collection('class_user_payment').insert(details);
+                    highestId = await db.collection('student_payment_log').find().sort([['_id', -1]]).limit(1).toArray();
+                    highestId = highestId[0]._id;
+                    const paymentLogId = highestId + 1;
+                    details = {
+                        '_id': paymentLogId,
+                        'payment_id': paymentId,
+                        'payments': [],
+                        'created_date': createdDate,
+                        'is_active': 1,
+                    }
+                    let paymentLogAdded = await db.collection('student_payment_log').insert(details);
                     if (userAdded) {
                         success = true;
                     } else {
@@ -1333,6 +1375,37 @@ async function changeClassStudentStatus(req, res, db) {
                             }
                         }
                     )
+                    console.log('THE PROBLEM IS THIS!!!')
+                    let paymentUpdated = await db.collection('class_user_payment').update(
+                        {
+                            'is_active': 1,
+                            'student_id': student._id,
+                            'class_id': req.body.class,
+                        },
+                        {
+                            $set: {
+                                'is_active': 0,
+                                'deleted_date': createdDate
+                            }
+                        }
+                    );
+                    let payment = await db.collection('class_user_payment').findOne({
+                        'is_active': 0,
+                        'student_id': student._id,
+                        'class_id': req.body.class,
+                    });
+                    let paymentLogUpdated = await db.collection('student_payment_log').update(
+                        {
+                            'is_active': 1,
+                            'payment_id': payment._id
+                        }, 
+                        {
+                            $set: {
+                                'is_active': 0,
+                                'deleted_date': createdDate
+                            }
+                        }
+                    );
                     if (userUpdated.result.n === 1 && userUpdated.result.nModified === 1 && userUpdated.result.ok === 1) {
                         success = true;
                     } else {
@@ -1445,7 +1518,7 @@ async function getAllClassesName(req, res, db) {
         });
     };
     try {
-        let classes = await db.collection('class').find({}).toArray();
+        let classes = await db.collection('class').find({is_active: 1}).toArray();
         return res.send({
             classes
         })
@@ -1490,37 +1563,162 @@ async function getPaymentByUser(req, res, db) {
     }
 }
 
+async function getStudentPaymentLog (req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let studentPaymentLog = [];
+        let payments = req.body.payments;
+        // console.log(payments);
+        for (let i = 0; i < payments.length; i++) {
+            let details = {
+                'payment_id': payments[i],
+                'is_active': 1
+            }
+            let selectedLog = await db.collection('student_payment_log').findOne(details);
+            // console.log(selectedLog);
+            studentPaymentLog.push(selectedLog);
+            if (i === payments.length - 1) {
+                return res.send({
+                    studentPaymentLog
+                })
+            }
+        }
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function addStudentPayment (req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    try {
+        let updatePaymentLog = await db.collection('student_payment_log').update(
+            {
+                _id: req.body.id,
+                is_active: 1
+            }, {
+                $push: {
+                    payments: {
+                        payment_amount: req.body.amount,
+                        payment_date: req.body.date,
+                        payment_for: req.body.desc,
+                        created_date: moment().format('YYYY-MM-DD, HH:mm:ss')
+                    }
+                }
+            }
+        )
+        if (updatePaymentLog) {
+            return res.send({
+                'type': 'success',
+                'message': 'Payment added successfully'
+            })
+        }
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+}
+
+async function getAllPayments (req, res, db) {
+    let token = req.headers.authorization.split('Bearer ').pop();
+    let decoded = jwt.verify(token, process.env.TOKEN_SECRET);
+    let roleId = decoded.role_id;
+    if (+roleId !== 1 && +roleId !== 2) {
+        return res.send({
+            'message': 'Access forbiden',
+            'role': roleId
+        });
+    };
+    let teacherId;
+    try {
+        if (+roleId === 2) {
+            let teacher = await db.collection('user').findOne({
+                'username': decoded.username
+            });
+            teacherId = teacher._id
+        }
+        const details = {
+            is_active: 1
+        };
+        let classes = await db.collection('class').find(details).toArray();
+        let classUserPayment = await db.collection('class_user_payment').find(details).toArray();
+        let studentPaymentLog = await db.collection('student_payment_log').find(details).toArray();
+        return res.send({
+            'roleId': roleId,
+            'teacher': teacherId,
+            'classes': classes, 
+            'classUserPayment': classUserPayment, 
+            'studentPaymentLog': studentPaymentLog
+        })
+    }
+    catch (err) {
+        console.log(err)
+        return res.send({
+            'type': 'error',
+            'message': 'Some errors occured'
+        });
+    }
+    find({})
+}
+
 module.exports = {
-  register: register,
-  login: login,
-  authentication: authentication,
-  changePassword: changePassword,
-  googleRegister: googleRegister,
-  facebookRegister: facebookRegister,
-  googleUnbind: googleUnbind,
-  facebookUnbind: facebookUnbind,
-  googleLogin: googleLogin,
-  facebookLogin: facebookLogin,
-  checkPermission: checkPermission,
-  getAllTeachers: getAllTeachers,
-  deleteTeacher: deleteTeacher,
-  getTeacherById: getTeacherById,
-  changeTeacherData: changeTeacherData,
-  getAllStudents: getAllStudents,
-  deleteStudent: deleteStudent,
-  getStudentById: getStudentById,
-  changeStudentData: changeStudentData,
-  getAllClasses: getAllClasses,
-  addClass: addClass,
-  getClassById: getClassById,
-  changeClassData: changeClassData,
-  deleteClass: deleteClass,
-  addStudent: addStudent,
-  addTeacher: addTeacher,
-  getClassInfo: getClassInfo,
-  changeClassStudentStatus: changeClassStudentStatus,
-  getAllUserPayment: getAllUserPayment,
-  changePaymentAmount: changePaymentAmount,
-  getAllClassesName: getAllClassesName,
-  getPaymentByUser: getPaymentByUser
+    register: register,
+    login: login,
+    authentication: authentication,
+    changePassword: changePassword,
+    googleRegister: googleRegister,
+    facebookRegister: facebookRegister,
+    googleUnbind: googleUnbind,
+    facebookUnbind: facebookUnbind,
+    googleLogin: googleLogin,
+    facebookLogin: facebookLogin,
+    checkPermission: checkPermission,
+    getAllTeachers: getAllTeachers,
+    deleteTeacher: deleteTeacher,
+    getTeacherById: getTeacherById,
+    changeTeacherData: changeTeacherData,
+    getAllStudents: getAllStudents,
+    deleteStudent: deleteStudent,
+    getStudentById: getStudentById,
+    changeStudentData: changeStudentData,
+    getAllClasses: getAllClasses,
+    addClass: addClass,
+    getClassById: getClassById,
+    changeClassData: changeClassData,
+    deleteClass: deleteClass,
+    addStudent: addStudent,
+    addTeacher: addTeacher,
+    getClassInfo: getClassInfo,
+    changeClassStudentStatus: changeClassStudentStatus,
+    getAllUserPayment: getAllUserPayment,
+    changePaymentAmount: changePaymentAmount,
+    getAllClassesName: getAllClassesName,
+    getPaymentByUser: getPaymentByUser,
+    getStudentPaymentLog: getStudentPaymentLog,
+    addStudentPayment: addStudentPayment,
+    getAllPayments: getAllPayments
 };

@@ -11,7 +11,8 @@
         "command:initialize-role_permission": "node commands/initialize-role_permission.js",
         "command:initialize-class": "node commands/initialize-class.js",
         "command:initialize-user_class": "node commands/initialize-user_class.js",
-        "command:initialize-class_user_payment": "node commands/initialize-class_user_payment.js"
+        "command:initialize-class_user_payment": "node commands/initialize-class_user_payment.js",
+        "command:initialize-student_payment_log": "node commands/initialize-student_payment_log.js"
     },
     "author": "",
     "license": "ISC",
