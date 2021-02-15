@@ -51,7 +51,8 @@ async function login(req, res, db) {
             }
             if (user.is_active != 1) {
                 return res.send ({
-                    'message': 'not active user'
+                    'type': 'error',
+                    'message': 'This user is blocked!'
                 })
             }
             let userRole = user.role_id;
@@ -65,7 +66,8 @@ async function login(req, res, db) {
                     google: userGoogle,
                     facebook: userFacebook
                 }, process.env.TOKEN_SECRET, {algorithm: 'HS384'}, { expiresIn: 72000 });
-                return res.send({ 
+                return res.send({
+                    'type': 'success', 
                     'message': 'successful authenticated!', 
                     'token': token, 
                     'username': req.body.username, 
@@ -74,10 +76,10 @@ async function login(req, res, db) {
                     'permissions': await checkPermission(req, res, db, token)
                 });
             } else {
-                return res.send('falseeeeee')
+                return res.send({'type': 'error', 'message': 'Wrong password'});
             }
         } else {
-            return res.send({ 'message': 'invalid credential' });
+            return res.send({ 'type ': 'error', 'message': 'Wrong username' });
         }
     } catch (error) {
         console.log('some error', error);
@@ -867,8 +869,13 @@ async function addClass (req, res, db) {
             })
         }
         let highestId = await db.collection('class').find().sort([['_id', -1]]).limit(1).toArray();
-        highestId = highestId[0]._id;
-        const newestId = highestId + 1;
+        let newestId = '';
+        if (highestId.length === 0) {
+            newestId = 1;
+        } else {
+            highestId = highestId[0]._id;
+            newestId = highestId + 1;
+        }
         const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
         details = {
             '_id': newestId,
@@ -1076,8 +1083,13 @@ async function addStudent (req, res, db) {
             })
         }
         let highestId = await db.collection('user').find().sort([['_id', -1]]).limit(1).toArray();
-        highestId = highestId[0]._id;
-        const newestId = highestId + 1;
+        let newestId = '';
+        if (highestId.length === 0) {
+            newestId = 1;
+        } else {
+            highestId = highestId[0]._id;
+            newestId = highestId + 1;
+        }
         const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
         details = {
             '_id': newestId,
@@ -1150,8 +1162,13 @@ async function addTeacher(req, res, db) {
             })
         }
         let highestId = await db.collection('user').find().sort([['_id', -1]]).limit(1).toArray();
-        highestId = highestId[0]._id;
-        const newestId = highestId + 1;
+        let newestId = '';
+        if (highestId.length === 0) {
+            newestId = 1;
+        } else {
+            highestId = highestId[0]._id;
+            newestId = highestId + 1;
+        }
         const createdDate = moment().format('YYYY-MM-DD, HH:mm:ss');
         details = {
             '_id': newestId,
@@ -1195,7 +1212,6 @@ async function getClassInfo (req, res, db) {
     };
     try {
         let highestId = await db.collection('user_class').find().sort([['_id', -1]]).limit(1).toArray();
-        console.log(highestId);
         let newestId = '';
         if (highestId.length === 0) {
             newestId = 1;
@@ -1323,8 +1339,13 @@ async function changeClassStudentStatus(req, res, db) {
                     index++;
                     let userAdded = await db.collection('user_class').insert(details);
                     let highestId = await db.collection('class_user_payment').find().sort([['_id', -1]]).limit(1).toArray();
-                    highestId = highestId[0]._id;
-                    const paymentId = highestId + 1;
+                    let paymentId = '';
+                    if (highestId.length === 0) {
+                        paymentId = 1;
+                    } else {
+                        highestId = highestId[0]._id;
+                        paymentId = highestId + 1;
+                    }
                     details = {
                         '_id': paymentId,
                         'student_id': student._id,
